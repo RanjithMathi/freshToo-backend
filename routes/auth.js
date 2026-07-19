@@ -15,7 +15,39 @@ function signToken(admin) {
   );
 }
 
-// POST /auth/login
+/**
+ * @openapi
+ * /auth/login:
+ *   post:
+ *     summary: Admin login
+ *     tags: [Auth]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email, password]
+ *             properties:
+ *               email: { type: string, example: admin@chickendelivery.com }
+ *               password: { type: string, example: ChangeMe123! }
+ *     responses:
+ *       200:
+ *         description: Login successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 admin: { $ref: '#/components/schemas/Admin' }
+ *                 token: { type: string }
+ *       401:
+ *         description: Invalid credentials
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -46,7 +78,24 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// GET /auth/me
+/**
+ * @openapi
+ * /auth/me:
+ *   get:
+ *     summary: Get the currently authenticated admin's profile
+ *     tags: [Auth]
+ *     responses:
+ *       200:
+ *         description: Current admin profile
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 admin: { $ref: '#/components/schemas/Admin' }
+ *       404:
+ *         description: Admin not found
+ */
 router.get('/me', authenticateToken, async (req, res) => {
   const result = await query(
     'SELECT id, name, email, role, is_active, created_at FROM admins WHERE id = $1',
@@ -58,7 +107,37 @@ router.get('/me', authenticateToken, async (req, res) => {
   res.json({ admin: result.rows[0] });
 });
 
-// POST /auth/staff  (super_admin and manager can create staff accounts)
+/**
+ * @openapi
+ * /auth/staff:
+ *   post:
+ *     summary: Create a staff/manager account (requires super_admin or manager)
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [name, email, password]
+ *             properties:
+ *               name: { type: string, example: Priya Staff }
+ *               email: { type: string, example: priya@chickendelivery.com }
+ *               password: { type: string, example: SomePass123! }
+ *               role: { type: string, enum: [manager, staff, super_admin], example: staff }
+ *     responses:
+ *       201:
+ *         description: Staff account created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties: { admin: { $ref: '#/components/schemas/Admin' } }
+ *       403:
+ *         description: Insufficient permissions
+ *       409:
+ *         description: Email already registered
+ */
 router.post('/staff', authenticateToken, requireRole('super_admin', 'manager'), async (req, res) => {
   try {
     const { name, email, password, role } = req.body;
@@ -100,7 +179,24 @@ router.post('/staff', authenticateToken, requireRole('super_admin', 'manager'), 
   }
 });
 
-// GET /auth/staff  (list admin/staff accounts)
+/**
+ * @openapi
+ * /auth/staff:
+ *   get:
+ *     summary: List all admin/staff accounts
+ *     tags: [Auth]
+ *     responses:
+ *       200:
+ *         description: List of staff accounts
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 staff:
+ *                   type: array
+ *                   items: { $ref: '#/components/schemas/Admin' }
+ */
 router.get('/staff', authenticateToken, requireRole('super_admin', 'manager'), async (req, res) => {
   const result = await query(
     'SELECT id, name, email, role, is_active, created_at FROM admins ORDER BY created_at DESC'
@@ -108,7 +204,30 @@ router.get('/staff', authenticateToken, requireRole('super_admin', 'manager'), a
   res.json({ staff: result.rows });
 });
 
-// PUT /auth/staff/:id/status  (activate/deactivate)
+/**
+ * @openapi
+ * /auth/staff/{id}/status:
+ *   put:
+ *     summary: Activate or deactivate a staff account (super_admin only)
+ *     tags: [Auth]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties: { is_active: { type: boolean } }
+ *     responses:
+ *       200:
+ *         description: Updated admin
+ *       404:
+ *         description: Admin not found
+ */
 router.put('/staff/:id/status', authenticateToken, requireRole('super_admin'), async (req, res) => {
   const { is_active } = req.body;
   const result = await query(

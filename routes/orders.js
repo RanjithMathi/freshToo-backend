@@ -6,7 +6,37 @@ const router = Router();
 
 const VALID_STATUSES = ['pending', 'confirmed', 'preparing', 'out_for_delivery', 'delivered', 'cancelled'];
 
-// GET /orders?status=&customer_id=&from=&to=
+/**
+ * @openapi
+ * /orders:
+ *   get:
+ *     summary: List orders
+ *     tags: [Orders]
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema: { type: string, enum: [pending, confirmed, preparing, out_for_delivery, delivered, cancelled] }
+ *       - in: query
+ *         name: customer_id
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: from
+ *         schema: { type: string, format: date-time }
+ *       - in: query
+ *         name: to
+ *         schema: { type: string, format: date-time }
+ *     responses:
+ *       200:
+ *         description: List of orders
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 orders:
+ *                   type: array
+ *                   items: { $ref: '#/components/schemas/Order' }
+ */
 router.get('/', authenticateToken, async (req, res) => {
   const { status, customer_id, from, to } = req.query;
   const conditions = [];
@@ -34,7 +64,32 @@ router.get('/', authenticateToken, async (req, res) => {
   res.json({ orders: result.rows });
 });
 
-// GET /orders/:id  (with items)
+/**
+ * @openapi
+ * /orders/{id}:
+ *   get:
+ *     summary: Get a single order with its line items
+ *     tags: [Orders]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Order and items
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 order: { $ref: '#/components/schemas/Order' }
+ *                 items:
+ *                   type: array
+ *                   items: { $ref: '#/components/schemas/OrderItem' }
+ *       404:
+ *         description: Order not found
+ */
 router.get('/:id', authenticateToken, async (req, res) => {
   const orderResult = await query('SELECT * FROM orders WHERE id = $1', [req.params.id]);
   if (orderResult.rows.length === 0) return res.status(404).json({ error: 'Order not found' });
@@ -49,8 +104,38 @@ router.get('/:id', authenticateToken, async (req, res) => {
   res.json({ order: orderResult.rows[0], items: itemsResult.rows });
 });
 
-// POST /orders  (manual order creation, e.g. phone orders taken by admin)
-// body: { customer_id, address_id, delivery_zone_id, payment_method, items: [{ product_id, quantity }] }
+/**
+ * @openapi
+ * /orders:
+ *   post:
+ *     summary: Create a manual order (e.g. a phone order taken by admin/staff)
+ *     description: >
+ *       Runs in a DB transaction: locks each product row, validates stock,
+ *       decrements it, and computes subtotal/delivery charge/total.
+ *     tags: [Orders]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { $ref: '#/components/schemas/OrderCreateRequest' }
+ *     responses:
+ *       201:
+ *         description: Order created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 order: { $ref: '#/components/schemas/Order' }
+ *                 items:
+ *                   type: array
+ *                   items: { $ref: '#/components/schemas/OrderItem' }
+ *       400:
+ *         description: Validation error (missing fields, insufficient stock, inactive product)
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 router.post('/', authenticateToken, requireRole('super_admin', 'manager', 'staff'), async (req, res) => {
   const { customer_id, address_id, delivery_zone_id, payment_method = 'cod', items, notes } = req.body;
 
@@ -127,7 +212,39 @@ router.post('/', authenticateToken, requireRole('super_admin', 'manager', 'staff
   }
 });
 
-// PUT /orders/:id/status
+/**
+ * @openapi
+ * /orders/{id}/status:
+ *   put:
+ *     summary: Update an order's status
+ *     description: >
+ *       Cancelling an order that wasn't already delivered/cancelled automatically
+ *       restocks its line items.
+ *     tags: [Orders]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [status]
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum: [pending, confirmed, preparing, out_for_delivery, delivered, cancelled]
+ *     responses:
+ *       200:
+ *         description: Updated order
+ *       400:
+ *         description: Invalid status value
+ *       404:
+ *         description: Order not found
+ */
 router.put('/:id/status', authenticateToken, requireRole('super_admin', 'manager', 'staff'), async (req, res) => {
   const { status } = req.body;
   if (!VALID_STATUSES.includes(status)) {
@@ -171,7 +288,33 @@ router.put('/:id/status', authenticateToken, requireRole('super_admin', 'manager
   }
 });
 
-// PUT /orders/:id/assign-delivery
+/**
+ * @openapi
+ * /orders/{id}/assign-delivery:
+ *   put:
+ *     summary: Assign a delivery partner to an order
+ *     tags: [Orders]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [delivery_partner_id]
+ *             properties: { delivery_partner_id: { type: integer } }
+ *     responses:
+ *       200:
+ *         description: Updated order
+ *       400:
+ *         description: Delivery partner is not active
+ *       404:
+ *         description: Order or delivery partner not found
+ */
 router.put('/:id/assign-delivery', authenticateToken, requireRole('super_admin', 'manager', 'staff'), async (req, res) => {
   const { delivery_partner_id } = req.body;
   if (!delivery_partner_id) return res.status(400).json({ error: 'delivery_partner_id is required' });
@@ -188,7 +331,31 @@ router.put('/:id/assign-delivery', authenticateToken, requireRole('super_admin',
   res.json({ order: result.rows[0] });
 });
 
-// POST /orders/:id/refund
+/**
+ * @openapi
+ * /orders/{id}/refund:
+ *   post:
+ *     summary: Refund a paid order (manager+)
+ *     tags: [Orders]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties: { transaction_ref: { type: string, example: "refund_txn_123" } }
+ *     responses:
+ *       200:
+ *         description: Refunded order
+ *       400:
+ *         description: Order isn't paid, so it can't be refunded
+ *       404:
+ *         description: Order not found
+ */
 router.post('/:id/refund', authenticateToken, requireRole('super_admin', 'manager'), async (req, res) => {
   const order = await query('SELECT * FROM orders WHERE id = $1', [req.params.id]);
   if (order.rows.length === 0) return res.status(404).json({ error: 'Order not found' });

@@ -1,8 +1,10 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import swaggerUi from 'swagger-ui-express';
 
 import { pool } from './db/pool.js';
+import { swaggerSpec } from './swagger.js';
 import authRoutes from './routes/auth.js';
 import categoryRoutes from './routes/categories.js';
 import productRoutes from './routes/products.js';
@@ -18,6 +20,24 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+  customSiteTitle: 'Chicken Delivery Admin API Docs',
+}));
+app.get('/api-docs.json', (req, res) => res.json(swaggerSpec));
+
+/**
+ * @openapi
+ * /health:
+ *   get:
+ *     summary: Health check — verifies the server and DB connection are alive
+ *     tags: [Health]
+ *     security: []
+ *     responses:
+ *       200:
+ *         description: Server and DB are healthy
+ *       500:
+ *         description: DB connection failed
+ */
 app.get('/health', async (req, res) => {
   try {
     const result = await pool.query('SELECT NOW()');

@@ -5,7 +5,31 @@ import { authenticateToken, requireRole } from '../middleware/auth.js';
 
 const router = Router();
 
-// GET /delivery-partners?zone_id=&is_available=
+/**
+ * @openapi
+ * /delivery-partners:
+ *   get:
+ *     summary: List delivery partners (riders)
+ *     tags: [Delivery Partners]
+ *     parameters:
+ *       - in: query
+ *         name: zone_id
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: is_available
+ *         schema: { type: boolean }
+ *     responses:
+ *       200:
+ *         description: List of delivery partners
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 delivery_partners:
+ *                   type: array
+ *                   items: { $ref: '#/components/schemas/DeliveryPartner' }
+ */
 router.get('/', authenticateToken, async (req, res) => {
   const { zone_id, is_available } = req.query;
   const conditions = [];
@@ -29,7 +53,29 @@ router.get('/', authenticateToken, async (req, res) => {
   res.json({ delivery_partners: result.rows });
 });
 
-// GET /delivery-partners/:id/orders  (current assignments)
+/**
+ * @openapi
+ * /delivery-partners/{id}/orders:
+ *   get:
+ *     summary: Get a delivery partner's current (non-final) order assignments
+ *     tags: [Delivery Partners]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: List of orders
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 orders:
+ *                   type: array
+ *                   items: { $ref: '#/components/schemas/Order' }
+ */
 router.get('/:id/orders', authenticateToken, async (req, res) => {
   const result = await query(
     `SELECT * FROM orders WHERE delivery_partner_id = $1
@@ -39,7 +85,37 @@ router.get('/:id/orders', authenticateToken, async (req, res) => {
   res.json({ orders: result.rows });
 });
 
-// POST /delivery-partners
+/**
+ * @openapi
+ * /delivery-partners:
+ *   post:
+ *     summary: Create a delivery partner (manager+)
+ *     tags: [Delivery Partners]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [name, phone, password]
+ *             properties:
+ *               name: { type: string, example: Suresh }
+ *               phone: { type: string, example: "9876500000" }
+ *               email: { type: string, example: suresh@example.com }
+ *               password: { type: string, example: RiderPass123! }
+ *               vehicle_type: { type: string, example: bike }
+ *               zone_id: { type: integer }
+ *     responses:
+ *       201:
+ *         description: Delivery partner created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties: { delivery_partner: { $ref: '#/components/schemas/DeliveryPartner' } }
+ *       409:
+ *         description: Phone number already registered
+ */
 router.post('/', authenticateToken, requireRole('super_admin', 'manager'), async (req, res) => {
   try {
     const { name, phone, email, password, vehicle_type, zone_id } = req.body;
@@ -67,7 +143,34 @@ router.post('/', authenticateToken, requireRole('super_admin', 'manager'), async
   }
 });
 
-// PUT /delivery-partners/:id
+/**
+ * @openapi
+ * /delivery-partners/{id}:
+ *   put:
+ *     summary: Update a delivery partner (manager+)
+ *     tags: [Delivery Partners]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name: { type: string }
+ *               email: { type: string }
+ *               vehicle_type: { type: string }
+ *               zone_id: { type: integer }
+ *               is_active: { type: boolean }
+ *     responses:
+ *       200:
+ *         description: Updated delivery partner
+ *       404:
+ *         description: Delivery partner not found
+ */
 router.put('/:id', authenticateToken, requireRole('super_admin', 'manager'), async (req, res) => {
   const { name, email, vehicle_type, zone_id, is_active } = req.body;
   const result = await query(
@@ -85,7 +188,30 @@ router.put('/:id', authenticateToken, requireRole('super_admin', 'manager'), asy
   res.json({ delivery_partner: result.rows[0] });
 });
 
-// PUT /delivery-partners/:id/availability
+/**
+ * @openapi
+ * /delivery-partners/{id}/availability:
+ *   put:
+ *     summary: Toggle a delivery partner's availability
+ *     tags: [Delivery Partners]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties: { is_available: { type: boolean } }
+ *     responses:
+ *       200:
+ *         description: Updated availability
+ *       404:
+ *         description: Delivery partner not found
+ */
 router.put('/:id/availability', authenticateToken, async (req, res) => {
   const { is_available } = req.body;
   const result = await query(
@@ -96,7 +222,23 @@ router.put('/:id/availability', authenticateToken, async (req, res) => {
   res.json({ delivery_partner: result.rows[0] });
 });
 
-// DELETE /delivery-partners/:id
+/**
+ * @openapi
+ * /delivery-partners/{id}:
+ *   delete:
+ *     summary: Delete a delivery partner (super_admin only)
+ *     tags: [Delivery Partners]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Delivery partner deleted
+ *       404:
+ *         description: Delivery partner not found
+ */
 router.delete('/:id', authenticateToken, requireRole('super_admin'), async (req, res) => {
   const result = await query('DELETE FROM delivery_partners WHERE id = $1 RETURNING id', [req.params.id]);
   if (result.rows.length === 0) return res.status(404).json({ error: 'Delivery partner not found' });

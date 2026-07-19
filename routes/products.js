@@ -4,7 +4,35 @@ import { authenticateToken, requireRole } from '../middleware/auth.js';
 
 const router = Router();
 
-// GET /products?category_id=&is_active=&search=
+/**
+ * @openapi
+ * /products:
+ *   get:
+ *     summary: List products
+ *     tags: [Products]
+ *     parameters:
+ *       - in: query
+ *         name: category_id
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: is_active
+ *         schema: { type: boolean }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *         description: Case-insensitive match on product name
+ *     responses:
+ *       200:
+ *         description: List of products
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 products:
+ *                   type: array
+ *                   items: { $ref: '#/components/schemas/Product' }
+ */
 router.get('/', authenticateToken, async (req, res) => {
   const { category_id, is_active, search } = req.query;
   const conditions = [];
@@ -31,7 +59,24 @@ router.get('/', authenticateToken, async (req, res) => {
   res.json({ products: result.rows });
 });
 
-// GET /products/low-stock
+/**
+ * @openapi
+ * /products/low-stock:
+ *   get:
+ *     summary: List active products at or below their low-stock threshold
+ *     tags: [Products]
+ *     responses:
+ *       200:
+ *         description: Low-stock products
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 products:
+ *                   type: array
+ *                   items: { $ref: '#/components/schemas/Product' }
+ */
 router.get('/low-stock', authenticateToken, async (req, res) => {
   const result = await query(
     'SELECT * FROM products WHERE stock_quantity <= low_stock_threshold AND is_active = true ORDER BY stock_quantity ASC'
@@ -39,14 +84,67 @@ router.get('/low-stock', authenticateToken, async (req, res) => {
   res.json({ products: result.rows });
 });
 
-// GET /products/:id
+/**
+ * @openapi
+ * /products/{id}:
+ *   get:
+ *     summary: Get a single product
+ *     tags: [Products]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Product found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties: { product: { $ref: '#/components/schemas/Product' } }
+ *       404:
+ *         description: Product not found
+ */
 router.get('/:id', authenticateToken, async (req, res) => {
   const result = await query('SELECT * FROM products WHERE id = $1', [req.params.id]);
   if (result.rows.length === 0) return res.status(404).json({ error: 'Product not found' });
   res.json({ product: result.rows[0] });
 });
 
-// POST /products
+/**
+ * @openapi
+ * /products:
+ *   post:
+ *     summary: Create a product (manager+)
+ *     tags: [Products]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [name, price]
+ *             properties:
+ *               category_id: { type: integer }
+ *               name: { type: string, example: Chicken Breast Boneless }
+ *               description: { type: string }
+ *               unit_type: { type: string, enum: [piece, kg, combo], default: piece }
+ *               price: { type: number, example: 249 }
+ *               stock_quantity: { type: number, example: 50 }
+ *               low_stock_threshold: { type: number, example: 5 }
+ *               image_url: { type: string }
+ *     responses:
+ *       201:
+ *         description: Product created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties: { product: { $ref: '#/components/schemas/Product' } }
+ *       400:
+ *         description: Validation error
+ */
 router.post('/', authenticateToken, requireRole('super_admin', 'manager'), async (req, res) => {
   try {
     const {
@@ -71,7 +169,37 @@ router.post('/', authenticateToken, requireRole('super_admin', 'manager'), async
   }
 });
 
-// PUT /products/:id
+/**
+ * @openapi
+ * /products/{id}:
+ *   put:
+ *     summary: Update a product (manager+)
+ *     tags: [Products]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               category_id: { type: integer }
+ *               name: { type: string }
+ *               description: { type: string }
+ *               unit_type: { type: string, enum: [piece, kg, combo] }
+ *               price: { type: number }
+ *               low_stock_threshold: { type: number }
+ *               image_url: { type: string }
+ *               is_active: { type: boolean }
+ *     responses:
+ *       200:
+ *         description: Updated product
+ *       404:
+ *         description: Product not found
+ */
 router.put('/:id', authenticateToken, requireRole('super_admin', 'manager'), async (req, res) => {
   const {
     category_id, name, description, unit_type,
@@ -96,7 +224,35 @@ router.put('/:id', authenticateToken, requireRole('super_admin', 'manager'), asy
   res.json({ product: result.rows[0] });
 });
 
-// PUT /products/:id/stock  (set or adjust stock)
+/**
+ * @openapi
+ * /products/{id}/stock:
+ *   put:
+ *     summary: Set or adjust a product's stock quantity (staff+)
+ *     tags: [Products]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             description: Provide either stock_quantity (absolute) or adjust_by (relative, can be negative)
+ *             properties:
+ *               stock_quantity: { type: number, example: 40 }
+ *               adjust_by: { type: number, example: -5 }
+ *     responses:
+ *       200:
+ *         description: Updated product
+ *       400:
+ *         description: Must provide stock_quantity or adjust_by
+ *       404:
+ *         description: Product not found
+ */
 router.put('/:id/stock', authenticateToken, requireRole('super_admin', 'manager', 'staff'), async (req, res) => {
   const { stock_quantity, adjust_by } = req.body;
 
@@ -119,7 +275,23 @@ router.put('/:id/stock', authenticateToken, requireRole('super_admin', 'manager'
   res.json({ product: result.rows[0] });
 });
 
-// DELETE /products/:id
+/**
+ * @openapi
+ * /products/{id}:
+ *   delete:
+ *     summary: Delete a product (super_admin only)
+ *     tags: [Products]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Product deleted
+ *       404:
+ *         description: Product not found
+ */
 router.delete('/:id', authenticateToken, requireRole('super_admin'), async (req, res) => {
   const result = await query('DELETE FROM products WHERE id = $1 RETURNING id', [req.params.id]);
   if (result.rows.length === 0) return res.status(404).json({ error: 'Product not found' });

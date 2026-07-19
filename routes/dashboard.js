@@ -4,7 +4,33 @@ import { authenticateToken } from '../middleware/auth.js';
 
 const router = Router();
 
-// GET /dashboard/summary
+/**
+ * @openapi
+ * /dashboard/summary:
+ *   get:
+ *     summary: Today's key metrics — orders, revenue, active riders, pending orders, low stock
+ *     tags: [Dashboard]
+ *     responses:
+ *       200:
+ *         description: Dashboard summary
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 today_orders: { type: integer }
+ *                 today_revenue: { type: number }
+ *                 active_riders: { type: integer }
+ *                 pending_orders: { type: integer }
+ *                 low_stock_products: { type: integer }
+ *                 status_breakdown:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       status: { type: string }
+ *                       count: { type: integer }
+ */
 router.get('/summary', authenticateToken, async (req, res) => {
   const [todayOrders, todayRevenue, activeRiders, pendingOrders, lowStock] = await Promise.all([
     query(`SELECT COUNT(*) FROM orders WHERE created_at::date = CURRENT_DATE`),
@@ -31,7 +57,36 @@ router.get('/summary', authenticateToken, async (req, res) => {
   });
 });
 
-// GET /dashboard/reports/sales?from=&to=
+/**
+ * @openapi
+ * /dashboard/reports/sales:
+ *   get:
+ *     summary: Daily order count and revenue over a date range
+ *     tags: [Dashboard]
+ *     parameters:
+ *       - in: query
+ *         name: from
+ *         schema: { type: string, format: date-time }
+ *       - in: query
+ *         name: to
+ *         schema: { type: string, format: date-time }
+ *     responses:
+ *       200:
+ *         description: Daily sales breakdown
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 sales:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       day: { type: string, format: date }
+ *                       orders: { type: integer }
+ *                       revenue: { type: number }
+ */
 router.get('/reports/sales', authenticateToken, async (req, res) => {
   const { from, to } = req.query;
   const params = [];
@@ -55,7 +110,34 @@ router.get('/reports/sales', authenticateToken, async (req, res) => {
   res.json({ sales: result.rows });
 });
 
-// GET /dashboard/reports/top-products?limit=10
+/**
+ * @openapi
+ * /dashboard/reports/top-products:
+ *   get:
+ *     summary: Best-selling products by revenue
+ *     tags: [Dashboard]
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 10 }
+ *     responses:
+ *       200:
+ *         description: Top products
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 top_products:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id: { type: integer }
+ *                       name: { type: string }
+ *                       total_quantity: { type: number }
+ *                       total_revenue: { type: number }
+ */
 router.get('/reports/top-products', authenticateToken, async (req, res) => {
   const limit = Number(req.query.limit) || 10;
   const result = await query(
