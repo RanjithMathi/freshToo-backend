@@ -1,21 +1,19 @@
-// One-off script to create the users table.
-// Run with: node db/init.js
-import { pool, query } from './pool.js';
+// Run with: npm run db:init
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+import { pool } from './pool.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 async function init() {
-  await query(`
-    CREATE TABLE IF NOT EXISTS users (
-      id SERIAL PRIMARY KEY,
-      email TEXT UNIQUE NOT NULL,
-      password_hash TEXT NOT NULL,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-    );
-  `);
-  console.log('✅ users table ready');
+  const sql = readFileSync(join(__dirname, 'schema.sql'), 'utf-8');
+  await pool.query(sql);
+  console.log('✅ Schema created successfully');
   await pool.end();
 }
 
 init().catch((err) => {
-  console.error('Init failed:', err);
+  console.error('Schema init failed:', err);
   process.exit(1);
 });
