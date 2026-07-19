@@ -1,7 +1,6 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import swaggerUi from 'swagger-ui-express';
 
 import { pool } from './db/pool.js';
 import { swaggerSpec } from './swagger.js';
@@ -20,10 +19,36 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
-  customSiteTitle: 'Chicken Delivery Admin API Docs',
-}));
+// Raw OpenAPI spec, used by the docs page below (and importable into Postman etc.)
 app.get('/api-docs.json', (req, res) => res.json(swaggerSpec));
+
+// Swagger UI, loaded from a CDN rather than bundled static assets.
+// This avoids "Unexpected token '<'" errors that show up when a reverse proxy
+// or platform catch-all route intercepts requests for the bundled JS files
+// and returns an HTML page instead.
+app.get(['/api-docs', '/api-docs/'], (req, res) => {
+  res.type('html').send(`<!DOCTYPE html>
+<html>
+<head>
+  <title>Chicken Delivery Admin API Docs</title>
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
+</head>
+<body style="margin:0">
+  <div id="swagger-ui"></div>
+  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+  <script>
+    window.onload = () => {
+      window.ui = SwaggerUIBundle({
+        url: '/api-docs.json',
+        dom_id: '#swagger-ui',
+        presets: [SwaggerUIBundle.presets.apis],
+        layout: 'BaseLayout',
+      });
+    };
+  </script>
+</body>
+</html>`);
+});
 
 /**
  * @openapi
